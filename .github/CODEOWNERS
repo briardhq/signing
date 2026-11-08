@@ -1,0 +1,3 @@
+# Every pull request asks the owner for a review: a review request is what reaches the owner's
+# phone, and a pull request from a fork cannot assign anyone itself.
+* @briard-owner
