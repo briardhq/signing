@@ -1,2 +1,3 @@
 # What the release key signs is these exact bytes: no conversion of any kind, on any checkout.
 releases/** binary
+catalog/** binary
