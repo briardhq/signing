@@ -21,8 +21,10 @@
 # after a pull request changed it, and after a key rotation. Before signing, the job refuses unless
 # every line's version file is here with the sha256 the line names and, for every line that is new
 # since the list was last signed, the version is not lower than the one before it, the version
-# file's images come from the image repositories the app's previous version used, and each is what
-# an upstream tag of that version resolves to NOW. Those are read from this repository, which the
+# file's images come from the image repositories the app's previous version used (Files alone may
+# add the container that serves its drive, built by this organization), and each is what a tag of
+# its own part of the version resolves to NOW: a version names one part per container, joined by
+# `-`. Those are read from this repository, which the
 # publishing machine cannot write, and from the registries; the pull request's description is not
 # consulted. A new app's repository is checked by eye at its first merge (README).
 name: sign
@@ -134,11 +136,21 @@ jobs:
               if [ -n "$old" ]; then
                 was=${old%%$'\t'*}
                 [ "$(printf '%s\n%s\n' "$was" "$ver" | sort -V | tail -1)" = "$ver" ] || refuse "$app goes down, $was -> $ver"
+                # An app pulls from where it pulled before. The one addition allowed: Files gains
+                # the container that serves its drive, from the image this organization builds.
                 [ "$(repos "catalog/$app/$was.json")" = "$(repos "$f")" ] ||
+                  { [ "$app" = files ] && [ "$(repos "$f")" = "$(repos "catalog/$app/$was.json")"$'\n'"ghcr.io/briardhq/catalog/samba" ]; } ||
                   refuse "$app $ver pulls from $(repos "$f" | tr '\n' ' ')where $was pulled from $(repos "catalog/$app/$was.json" | tr '\n' ' ')"
               fi
+              # A version names one part per container, in their order, joined by `-`
+              # (2.0.2-4.25.1 is Files 2.0.2 with Samba 4.25.1), and each image is a tag of its
+              # own part: the whole version is no tag of either repository.
+              IFS=- read -ra parts <<< "$ver"
+              [ "${#parts[@]}" = "$(jq '.containers | length' "$f")" ] || refuse "$app $ver does not name one part per container"
+              i=0
               while IFS= read -r img; do
-                upstream "${img%@*}" "${img#*@}" "$ver" || refuse "$app $ver: ${img#*@} is no upstream $ver tag's in ${img%@*}"
+                upstream "${img%@*}" "${img#*@}" "${parts[$i]}" || refuse "$app $ver: ${img#*@} is no ${parts[$i]} tag's in ${img%@*}"
+                i=$((i + 1))
               done < <(jq -r '.containers[].image' "$f")
             done < <(jq -r '.apps[] | select(.available) | [.name, .version, .identity] | @tsv' "$list")
             sign "$list"
