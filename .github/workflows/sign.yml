@@ -144,12 +144,16 @@ jobs:
               fi
               # A version names one part per container, in their order, joined by `-`
               # (2.0.2-4.25.1 is Files 2.0.2 with Samba 4.25.1), and each image is a tag of its
-              # own part: the whole version is no tag of either repository.
+              # own part's release, the part's first three numbers: the whole version is no tag of
+              # either repository, and a fourth number is a change made by hand under the same
+              # upstreams (2.1.0-4.25.1.1 runs Files 2.1.0 differently), whose image is that
+              # release's, never another's.
               IFS=- read -ra parts <<< "$ver"
               [ "${#parts[@]}" = "$(jq '.containers | length' "$f")" ] || refuse "$app $ver does not name one part per container"
               i=0
               while IFS= read -r img; do
-                upstream "${img%@*}" "${img#*@}" "${parts[$i]}" || refuse "$app $ver: ${img#*@} is no ${parts[$i]} tag's in ${img%@*}"
+                rel=$(printf '%s' "${parts[$i]}" | cut -d. -f1-3)
+                upstream "${img%@*}" "${img#*@}" "$rel" || refuse "$app $ver: ${img#*@} is no $rel tag's in ${img%@*}"
                 i=$((i + 1))
               done < <(jq -r '.containers[].image' "$f")
             done < <(jq -r '.apps[] | select(.available) | [.name, .version, .identity] | @tsv' "$list")
